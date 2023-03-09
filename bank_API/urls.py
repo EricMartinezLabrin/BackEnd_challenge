@@ -23,4 +23,8 @@ urlpatterns = [
          name='transaction_delete_view'),
     path('transaction_detail_view/<str:transaction_id>', views.TransactionDetailView.as_view(),
          name='transaction_detail_view'),
+    path('transaction_list_view/<str:account_number>', views.TransactionListView.as_view(),
+         name='transaction_list_view'),
+    path('account_balance_update_view/<int:pk>', views.AccountUpdateBalanceView.as_view(),
+         name='account_balance_update_view'),
 ]

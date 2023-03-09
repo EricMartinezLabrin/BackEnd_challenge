@@ -16,8 +16,8 @@ class Account(models.Model):
     customer_name = models.CharField(max_length=200)
     account_type = models.CharField(
         max_length=200, choices=ACCOUNT_TYPE_CHOICES)
-    account_creation = models.DateTimeField(auto_now=True)
-    last_update = models.DateTimeField(auto_now_add=True)
+    account_creation = models.DateTimeField(auto_now_add=True)
+    last_update = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.account_number
@@ -54,7 +54,7 @@ class Transaction(models.Model):
     amount = models.FloatField()
     transaction_type = models.CharField(
         max_length=200, choices=TRANSACTION_TYPE_CHOICES)
-    timestamp = models.DateTimeField(auto_now=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
     description = models.CharField(max_length=200)
     status = models.CharField(max_length=200)
 
@@ -62,6 +62,8 @@ class Transaction(models.Model):
         return self.transaction_id
 
     def save(self, *args, **kwargs):
+        if self.amount < 0:
+            raise ValueError("Amount cannot be negative")
         if self.transaction_type == 'Withdraw' and self.amount > self.account_number.balance:
             raise ValidationError("Not enough funds in the account")
         super().save(*args, **kwargs)

@@ -463,7 +463,7 @@ class TransactionCreateViewTest(TestCase):
         data = {
             'transaction_id': 'abcdefghijk',
             'account_number': self.account.id,
-            'amount': 100,
+            'amount': 500.00,
             'transaction_type': 'Deposit',
             'description': 'Initial deposit',
             'status': 'Success'
@@ -472,7 +472,7 @@ class TransactionCreateViewTest(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Transaction.objects.count(), 1)
         self.assertEqual(Transaction.objects.get(
-            transaction_id='abcdefghijk').amount, 100.0)
+            transaction_id='abcdefghijk').amount, 500.0)
         self.assertEqual(Transaction.objects.get(
             transaction_id='abcdefghijk').transaction_type, 'Deposit')
 
@@ -677,15 +677,15 @@ class TransactionCreateViewTest(TestCase):
         data = {
             'transaction_id': 'abcdefghijk',
             'account_number': self.account.id,
-            'amount': 100,
+            'amount': 500.00,
             'transaction_type': 'Withdraw',
-            'description': 'Initial deposit',
+            'description': 'ATM withdraw',
             'status': 'Success'
         }
         response = self.client.post(self.url, data=data)
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Account.objects.get(
-            pk=self.account.id).balance, 400.00)
+            pk=self.account.id).balance, 0.00)
 
 
 class TransactionUpdateViewTest(TestCase):
@@ -866,3 +866,119 @@ class TransactionDetailViewTest(TestCase):
         url = reverse('api:transaction_detail_view', args=('faketransaction',))
         request = self.client.get(url)
         self.assertEqual(request.status_code, 404)
+
+
+class TransactionListViewPerAccountTest(TestCase):
+    def setUp(self):
+        self.account = Account.objects.create(account_number='1234567890', balance=500.00,
+                                              customer_name="Jhon Doe", account_type="Savings")
+        self.account_no_transactions = Account.objects.create(account_number='no_transactions', balance=500.00,
+                                                              customer_name="Jhon Doe", account_type="Savings")
+
+        self.transaction = Transaction.objects.create(
+            transaction_id="abcdefghijk",
+            account_number=self.account,
+            amount=500.00,
+            transaction_type="Deposit",
+            description="Initial Deposit",
+            status="Sucess"
+        )
+        self.transaction2 = Transaction.objects.create(
+            transaction_id="1234567",
+            account_number=self.account,
+            amount=5000.00,
+            transaction_type="Deposit",
+            description="Second Deposit",
+            status="Sucess"
+        )
+
+    def test_return_list_with_correct_data(self):
+        """
+        Verifies if the transaction endpoint returns a list with the correct data for a given bank account. 
+        To do this, an account number is established, an HTTP GET request is generated through the Django 
+        test client and it is checked if a code 200 response is returned. Then it is verified if the returned 
+        data is the same as the expected data for the transactions that were made for that bank account.
+        """
+        account_number = "1234567890"
+        url = reverse('api:transaction_list_view', args=(account_number,))
+        response = self.client.get(url)
+        response_data = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response_data[0]['transaction_id'], self.transaction.transaction_id)
+        self.assertEqual(
+            response_data[0]['amount'], self.transaction.amount)
+        self.assertEqual(
+            response_data[1]['transaction_id'], self.transaction2.transaction_id)
+        self.assertEqual(
+            response_data[1]['amount'], self.transaction2.amount)
+
+    def test_return_list_with_incorrect_data(self):
+        """
+        Verifies if the transaction endpoint returns a 404 error response when an incorrect account ID is provided. 
+        To do this, a non-existent account number is established, an HTTP GET request is generated through the 
+        Django test client and it is checked if a 404 code response is returned.
+        """
+        account_number = "incorrect_id"
+        url = reverse('api:transaction_list_view', args=(account_number,))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_bank_account_with_no_transactions(self):
+        """
+        Tries to access a bank account that does not have registered transactions.
+
+        First, the account number account_number that will be used to perform the test is defined. 
+        Then, the URL corresponding to the TransactionListView view is generated using the account 
+        number in question. Next, a GET request is made to the URL using the Django test client and 
+        the response is stored in the response variable.
+
+        Then two things are verified. First, it is verified that the status code of the response is 200, 
+        which means that the request was made correctly. Afterwards, it is verified that the content of 
+        the answer is an empty list. To do this, the content of the response is loaded as JSON using 
+        json.loads() and compared to an empty list using assertEqual().
+        """
+        account_number = "no_transactions"
+        url = reverse('api:transaction_list_view', args=(account_number,))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content), [])
+
+
+class AccountBalanceUpdateViewTest(TestCase):
+    def setUp(self):
+        self.account = Account.objects.create(account_number='1234567890', balance=500.00,
+                                              customer_name="Jhon Doe", account_type="Savings")
+
+    def test_update_account_with_valid_data(self):
+        """
+        Proves that the balance of an existing account can be updated using the endpoint 
+        api:account_balance_update_view. A POST request is made to the corresponding URL, 
+        sending a data object that contains a new balance for the account. It is expected that the 
+        response will have an HTTP 200 status code and that the updated account will have the new balance.
+        """
+        url = reverse('api:account_balance_update_view',
+                      args=(self.account.pk,))
+
+        data = {
+            'balance': 1200.00,
+        }
+        response = self.client.post(url, data=data)
+        self.assertEqual(response.status_code, 200)
+        updated_account = Account.objects.get(pk=self.account.pk)
+        self.assertEqual(updated_account.balance, 1200.00)
+
+    def test_update_account_with_invalid_data(self):
+        """
+        Proof that the balance of a non-existent account cannot be updated. 
+        A POST request is made to a URL that does not correspond to an existing account, 
+        sending a data object that contains a new balance for the account. The response is expected to 
+        have an HTTP 404 status code, since the account does not exist in the database.
+        """
+        url = reverse('api:account_balance_update_view', args=(20,))
+
+        data = {
+            'balance': 1200.00,
+        }
+        response = self.client.post(url, data=data)
+        self.assertEqual(response.status_code, 404)

@@ -3,8 +3,9 @@ from django.forms import ValidationError
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse_lazy
-from django.views.generic import CreateView, UpdateView, DeleteView, DetailView
+from django.views.generic import CreateView, UpdateView, DeleteView, DetailView, ListView
 from django.core.serializers.json import DjangoJSONEncoder
+from django.http import Http404
 
 # Local
 from bank_API.models import Account, Transaction
@@ -239,3 +240,66 @@ class TransactionDetailView(DetailView):
         json_data = json.dumps(
             data, cls=DjangoJSONEncoder, default=custom_encoder)
         return JsonResponse(json_data, status=200, safe=False)
+
+
+class TransactionListView(ListView):
+    """
+    Is responsible for listing all transactions associated with a specific bank account. 
+    This is achieved by the get_queryset method, which returns all the transactions associated with the 
+    bank account provided as a URL argument.
+
+    If the bank account does not exist, the view returns a 404 response using the Http404 exception.
+
+    The get method creates a list of transaction dictionaries and returns the response as a JSON object using 
+    the JsonResponse method. The safe=False argument is used to allow complex objects to be serialized, 
+    while json_dumps_params is used to add indentation and formatting to the returned JSON object for better 
+    readability.
+    """
+    model = Transaction
+
+    def get_queryset(self):
+        account_number = self.kwargs['account_number']
+        if not Account.objects.filter(account_number=account_number):
+            raise Http404("Account Does Not Exist")
+        queryset = Transaction.objects.filter(
+            account_number__account_number=account_number)
+        return queryset
+
+    def get(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        data = []
+        for transaction in queryset:
+            data.append({
+                "transaction_id": transaction.transaction_id,
+                "account_number": transaction.account_number.account_number,
+                "amount": transaction.amount,
+                "transaction_type": transaction.transaction_type,
+                "timestamp": transaction.timestamp,
+                "description": transaction.description,
+                "status": transaction.status,
+            })
+        return JsonResponse(data, safe=False, json_dumps_params={'indent': 3})
+
+
+class AccountUpdateBalanceView(UpdateView):
+    """
+     maneja la actualización del saldo de una cuenta bancaria. El modelo utilizado es Account 
+     y solo se permite actualizar el campo balance. La vista tiene dos métodos principales: 
+     form_valid y form_invalid. Si el formulario es válido, el método form_valid guarda el objeto 
+     actualizado y devuelve un JsonResponse con los nuevos datos. Si el formulario no es válido, 
+     el método form_invalid devuelve un JsonResponse con los errores de validación.
+    """
+    model = Account
+    fields = ['balance']
+
+    def form_valid(self, form):
+        self.object = form.save()
+        data = {
+            'balance': self.object.balance,
+        }
+
+        return JsonResponse(data, status=200)
+
+    def form_invalid(self, form):
+        errors = form.errors.as_json()
+        return JsonResponse({'errors': errors}, status=400)
